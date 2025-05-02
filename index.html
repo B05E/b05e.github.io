@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive 3D Gallery</title>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.4/gsap.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #121212;
+            color: #ffffff;
+            overflow-x: hidden;
+            touch-action: none;
+        }
+
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #canvas {
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            outline: none;
+        }
+
+        .header {
+            position: absolute;
+            top: 30px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            z-index: 100;
+            pointer-events: none;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: 300;
+            margin-bottom: 0.5rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        .header p {
+            font-size: 1rem;
+            font-weight: 300;
+            margin-top: 0;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+    
+    .message-box {
+        position: absolute;
+        bottom: 80px; 
+        left: 50%;
+        transform: translateX(-50%);
+        background: linear-gradient(135deg, rgba(0,0,0,0.9) 0%, rgba(30,30,30,0.9) 100%);
+        padding: 58px 70px;
+        border-radius: 12px;
+        max-width: 650px;
+        text-align: center;
+        opacity: 0;
+        transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        z-index: 100;
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5),
+                    0 0 0 1px rgba(255, 255, 255, 0.05) inset,
+                    0 0 20px rgba(79, 195, 247, 0.15) inset;
+    }
+
+    .message-box.show {
+        opacity: 1;
+        transform: translateX(-50%) translateY(-10px);
+    }
+
+    .message-box h3 {
+        margin-top: 0;
+        margin-bottom: 15px;
+        font-weight: 500;
+        color: #4fc3f7;
+        font-size: 1.5rem;
+        text-shadow: 0 0 10px rgba(79, 195, 247, 0.3);
+    }
+
+    .message-box p {
+        margin-bottom: 0;
+        line-height: 1.7;
+        font-size: 1.1rem;
+        color: rgba(255, 255, 255, 0.9);
+    }
+
+    /* Add a subtle pulsing animation when visible */
+    @keyframes subtlePulse {
+        0% { box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 
+                         0 0 0 1px rgba(255, 255, 255, 0.05) inset, 
+                         0 0 20px rgba(79, 195, 247, 0.15) inset; }
+        50% { box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6), 
+                          0 0 0 1px rgba(255, 255, 255, 0.1) inset, 
+                          0 0 25px rgba(79, 195, 247, 0.2) inset; }
+        100% { box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 
+                          0 0 0 1px rgba(255, 255, 255, 0.05) inset, 
+                          0 0 20px rgba(79, 195, 247, 0.15) inset; }
+    }
+
+    .message-box.show {
+        animation: subtlePulse 3s infinite ease-in-out;
+    }
+
+    @media (max-width: 768px) {
+        .message-box {
+            width: 85%;
+            padding: 20px;
+            bottom: 60px;
+        }
+        
+        .message-box h3 {
+            font-size: 1.3rem;
+        }
+        
+        .message-box p {
+            font-size: 1rem;
+        }
+    }
+</style>
+</head>
+<body>
+    <div id="container">
+        <div class="header">
+            <h1>Interactive 3D Gallery</h1>
+            <p>Click or hover on the images to reveal messages</p>
+        </div>
+        
+        <div class="message-box" id="messageBox">
+            <h3 id="messageTitle">Message Title</h3>
+            <p id="messageContent">Message content will appear here when you interact with an image</p>
+        </div>
+        
+       
+        
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <script>
+        // Scene setup
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x121212);
+        
+        // Camera setup
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.z = 5;
+        
+        // Renderer setup with better antialiasing
+        const renderer = new THREE.WebGLRenderer({ 
+            canvas: document.getElementById('canvas'), 
+            antialias: true,
+            powerPreference: "high-performance"
+        });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Limit pixel ratio for performance
+        renderer.outputEncoding = THREE.sRGBEncoding;
+        
+        // Improved controls with smoother damping
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.1;
+        controls.enableZoom = false;
+        controls.autoRotate = true;
+        controls.autoRotateSpeed = 1.0;
+        controls.minPolarAngle = Math.PI / 4;
+        controls.maxPolarAngle = Math.PI / 1.5;
+        
+        // Enhanced lighting
+        const ambientLight = new THREE.AmbientLight(0x404040, 0.8);
+        scene.add(ambientLight);
+        
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(1, 1, 1);
+        scene.add(directionalLight);
+        
+        // Add subtle fill light
+        const fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
+        fillLight.position.set(-1, -0.5, -1);
+        scene.add(fillLight);
+        
+        // Textures and images with loading manager
+        const loadingManager = new THREE.LoadingManager();
+        loadingManager.onProgress = (url, itemsLoaded, itemsTotal) => {
+            console.log(`Loading ${url} (${itemsLoaded}/${itemsTotal})`);
+        };
+        
+        loadingManager.onLoad = () => {
+            console.log('All images loaded');
+            document.getElementById('messageContent').textContent = "Click on any image to see a message";
+        };
+        
+        const textureLoader = new THREE.TextureLoader(loadingManager);
+        const images = [
+            { 
+                url: 'https://imgs.search.brave.com/l2CsVMJxcx4Us9Of0WUvKR3eWiW5dKcd8wiw6i3gq-Q/rs:fit:860:0:0:0/g:ce/aHR0cHM6Ly9pLnBp/bmltZy5jb20vb3Jp/Z2luYWxzLzA0LzBi/L2I0LzA0MGJiNDU3/YzNkYmYyMjAzN2Uz/ZGMzYzA1NDI0ZjM2/LmpwZw', 
+                messages: ["nee poda patti"],
+              
+            },
+            { 
+                url: 'https://imgs.search.brave.com/Lb3wmUBPt_QbJPc1_LGohsVsHGnJZgcd5PhuI7TG_bU/rs:fit:860:0:0:0/g:ce/aHR0cHM6Ly9pLnBp/bmltZy5jb20vb3Jp/Z2luYWxzL2FjL2I3/Lzk0L2FjYjc5NDk2/ODQyYTk2MGVjYmQ3/ZTg0ZjZmMjNhYzNm/LmpwZw', 
+                messages: ["nee poda thendi"],
+              
+            },
+            { 
+                url: 'https://imgs.search.brave.com/XLCw1aOEw2AkaPldRPMCTyMmws_mFzX2ypxl7EfWmCs/rs:fit:860:0:0:0/g:ce/aHR0cHM6Ly9pLnBp/bmltZy5jb20vb3Jp/Z2luYWxzLzI4L2Rh/LzBiLzI4ZGEwYjNm/NThkOGJjMTc4Yjcw/N2I1ZGI5ZDcxMGNm/LmpwZw', 
+                messages: ["nee sheri alla"],
+               
+            }
+        ];
+        
+        // Create image planes with better geometry and material
+        const planes = [];
+        const planeGeometry = new THREE.PlaneGeometry(2.5, 1.8, 32, 32); // More segments for smoother edges
+        
+        images.forEach((image, index) => {
+            const texture = textureLoader.load(image.url);
+            texture.encoding = THREE.sRGBEncoding;
+            texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+            
+            const material = new THREE.MeshStandardMaterial({
+                map: texture,
+                roughness: 0.2,
+                metalness: 0.1,
+                side: THREE.DoubleSide
+            });
+            
+            const plane = new THREE.Mesh(planeGeometry, material);
+            
+            // Position planes in a circle with better spacing
+            const angle = (index / images.length) * Math.PI * 2;
+            plane.position.x = Math.cos(angle) * 3.5;
+            plane.position.z = Math.sin(angle) * 3.5;
+            plane.rotation.y = Math.PI + angle;
+            
+            // Add slight random tilt for more natural look
+            plane.rotation.x = (Math.random() - 0.5) * 0.2;
+            plane.rotation.z = (Math.random() - 0.5) * 0.2;
+            
+            // Store original position for hover animation
+            plane.userData = {
+                originalPosition: plane.position.clone(),
+                originalRotation: plane.rotation.clone(),
+                messages: image.messages,
+                title: image.title
+            };
+            
+            scene.add(plane);
+            planes.push(plane);
+        });
+        
+        // Raycaster for interaction with threshold
+        const raycaster = new THREE.Raycaster();
+        raycaster.params.Points.threshold = 0.1;
+        const mouse = new THREE.Vector2();
+        let currentIntersected = null;
+        
+        // Message box elements
+        const messageBox = document.getElementById('messageBox');
+        const messageTitle = document.getElementById('messageTitle');
+        const messageContent = document.getElementById('messageContent');
+        
+        // Event listeners with debouncing
+        window.addEventListener('resize', debounce(onWindowResize, 100));
+        window.addEventListener('mousemove', throttle(onMouseMove, 16));
+        window.addEventListener('click', onClick);
+        
+        // Touch support
+        window.addEventListener('touchstart', onTouchStart, { passive: false });
+        window.addEventListener('touchmove', throttle(onTouchMove, 16), { passive: false });
+        window.addEventListener('touchend', onTouchEnd);
+        
+        function debounce(func, wait) {
+            let timeout;
+            return function() {
+                const context = this, args = arguments;
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func.apply(context, args), wait);
+            };
+        }
+        
+        function throttle(func, limit) {
+            let lastFunc;
+            let lastRan;
+            return function() {
+                const context = this;
+                const args = arguments;
+                if (!lastRan) {
+                    func.apply(context, args);
+                    lastRan = Date.now();
+                } else {
+                    clearTimeout(lastFunc);
+                    lastFunc = setTimeout(function() {
+                        if ((Date.now() - lastRan) >= limit) {
+                            func.apply(context, args);
+                            lastRan = Date.now();
+                        }
+                    }, limit - (Date.now() - lastRan));
+                }
+            };
+        }
+        
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        
+        function onMouseMove(event) {
+            // Calculate mouse position in normalized device coordinates
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        }
+        
+        function onTouchStart(event) {
+            if (event.touches.length === 1) {
+                event.preventDefault();
+                mouse.x = (event.touches[0].clientX / window.innerWidth) * 2 - 1;
+                mouse.y = -(event.touches[0].clientY / window.innerHeight) * 2 + 1;
+            }
+        }
+        
+        function onTouchMove(event) {
+            if (event.touches.length === 1) {
+                event.preventDefault();
+                mouse.x = (event.touches[0].clientX / window.innerWidth) * 2 - 1;
+                mouse.y = -(event.touches[0].clientY / window.innerHeight) * 2 + 1;
+            }
+        }
+        
+        function onTouchEnd() {
+            if (currentIntersected) {
+                onClick();
+            }
+        }
+        
+        function onClick() {
+            if (currentIntersected) {
+                const messages = currentIntersected.userData.messages;
+                const randomMessage = messages[Math.floor(Math.random() * messages.length)];
+                
+                messageTitle.textContent = currentIntersected.userData.title;
+                messageContent.textContent = randomMessage;
+                messageBox.classList.add('show');
+                
+                // Hide message after 5 seconds
+                setTimeout(() => {
+                    messageBox.classList.remove('show');
+                }, 5000);
+            }
+        }
+        
+        // Animation loop with optimized performance
+        let lastTime = 0;
+        const animationDuration = 5.5;
+        
+        function animate(currentTime) {
+            requestAnimationFrame(animate);
+            
+            // Calculate delta time for frame-independent animation
+            const deltaTime = Math.min((currentTime - lastTime) / 1000, 2.1);
+            lastTime = currentTime;
+            
+            // Update controls
+            controls.update(deltaTime);
+            
+            // Raycasting
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(planes);
+            
+            if (intersects.length > 0) {
+                if (currentIntersected !== intersects[0].object) {
+                    // Reset previously intersected object
+                    if (currentIntersected) {
+                        resetPlaneAnimation(currentIntersected);
+                    }
+                    
+                    // Set new intersected object
+                    currentIntersected = intersects[0].object;
+                    
+                    // Animate hover effect with GSAP
+                    hoverPlaneAnimation(currentIntersected);
+                }
+            } else {
+                if (currentIntersected) {
+                    resetPlaneAnimation(currentIntersected);
+                    currentIntersected = null;
+                }
+            }
+            
+            renderer.render(scene, camera);
+        }
+        
+        function hoverPlaneAnimation(plane) {
+            gsap.to(plane.position, {
+                x: plane.userData.originalPosition.x * 0.7,
+                y: plane.userData.originalPosition.y * 0.7,
+                z: plane.userData.originalPosition.z * 0.7,
+                duration: animationDuration,
+                ease: "power2.out"
+            });
+            
+            gsap.to(plane.scale, { 
+                x: 1.2, 
+                y: 1.2, 
+                z: 1.2, 
+                duration: animationDuration,
+                ease: "power2.out"
+            });
+            
+            gsap.to(plane.rotation, {
+                x: plane.userData.originalRotation.x * 0.5,
+                y: plane.userData.originalRotation.y,
+                z: plane.userData.originalRotation.z * 0.5,
+                duration: animationDuration,
+                ease: "power2.out"
+            });
+            
+            gsap.to(plane.material, {
+                metalness: 0.5,
+                roughness: 0.1,
+                duration: animationDuration
+            });
+        }
+        
+        function resetPlaneAnimation(plane) {
+            gsap.to(plane.position, {
+                x: plane.userData.originalPosition.x,
+                y: plane.userData.originalPosition.y,
+                z: plane.userData.originalPosition.z,
+                duration: animationDuration,
+                ease: "power2.out"
+            });
+            
+            gsap.to(plane.scale, { 
+                x: 1, 
+                y: 1, 
+                z: 1, 
+                duration: animationDuration,
+                ease: "power2.out"
+            });
+            
+            gsap.to(plane.rotation, {
+                x: plane.userData.originalRotation.x,
+                y: plane.userData.originalRotation.y,
+                z: plane.userData.originalRotation.z,
+                duration: animationDuration,
+                ease: "power2.out"
+            });
+            
+            gsap.to(plane.material, {
+                metalness: 0.1,
+                roughness: 0.3,
+                duration: animationDuration
+            });
+        }
+        
+        // Start animation
+        animate(0);
+    </script>
+</body>
+</html>
